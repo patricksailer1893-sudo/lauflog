@@ -741,28 +741,32 @@ function Dashboard({ workouts, onAdd, onEdit }) {
           <div style={{ fontSize: 10, color: "#4a5475", letterSpacing: 2, textTransform: "uppercase" }}>Aktivitäts-Heatmap — letzte 26 Wochen</div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 10, color: "#4a5475" }}>weniger</span>
-            {["#0f1a0f","#1a3a1a","#2d6a2d","#4ade80"].map((c,i) => <div key={i} style={{ width: 10, height: 10, borderRadius: 2, background: c }} />)}
+            {["#0f1820","#1a3a1a","#2d6a2d","#4ade80"].map((c,i) => <div key={i} style={{ width: 10, height: 10, borderRadius: 2, background: c }} />)}
             <span style={{ fontSize: 10, color: "#4a5475" }}>mehr</span>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 3, overflowX: "auto" }}>
-          {heatWeeks.map((week, wi) => (
-            <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-              {week.map((d, di) => {
-                if (!d) return <div key={di} style={{ width: 12, height: 12 }} />;
-                const color = !d.has ? "#0f1820" : d.km > 15 ? "#4ade80" : d.km > 8 ? "#2d6a2d" : d.km > 0 ? "#1a3a1a" : "#4ade8066";
-                return (
-                  <div key={di} style={{ width: 12, height: 12, borderRadius: 2, background: color, cursor: d.has ? "pointer" : "default" }}
-                    title={d.has ? `${d.date}: ${d.km.toFixed(1)} km` : d.date} />
-                );
-              })}
-            </div>
-          ))}
-        </div>
-        <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-          {["Mo","Di","Mi","Do","Fr","Sa","So"].map(d => (
-            <div key={d} style={{ fontSize: 9, color: "#2a3050", width: 12, textAlign: "center" }}>{d}</div>
-          ))}
+        <div style={{ display: "flex", gap: 4, overflowX: "auto" }}>
+          {/* Day labels on left */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 3, paddingTop: 2, flexShrink: 0 }}>
+            {["Mo","Di","Mi","Do","Fr","Sa","So"].map(d => (
+              <div key={d} style={{ fontSize: 9, color: "#4a5475", height: 12, lineHeight: "12px", width: 14, textAlign: "right", paddingRight: 2 }}>{d}</div>
+            ))}
+          </div>
+          {/* Weeks grid */}
+          <div style={{ display: "flex", gap: 3, overflowX: "auto" }}>
+            {heatWeeks.map((week, wi) => (
+              <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                {week.map((d, di) => {
+                  if (!d) return <div key={di} style={{ width: 12, height: 12 }} />;
+                  const color = !d.has ? "#0f1820" : d.km > 15 ? "#4ade80" : d.km > 8 ? "#2d6a2d" : d.km > 0 ? "#1a3a1a" : "#4ade8066";
+                  return (
+                    <div key={di} style={{ width: 12, height: 12, borderRadius: 2, background: color, cursor: d.has ? "pointer" : "default" }}
+                      title={d.has ? `${d.date}: ${d.km.toFixed(1)} km` : d.date} />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
