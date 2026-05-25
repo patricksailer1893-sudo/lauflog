@@ -1085,6 +1085,192 @@ function AnalyseView({ workouts }) {
   );
 }
 
+// ── Meilensteine ───────────────────────────────────────────────────────────────
+const MILESTONES = [
+  { km: 50,   label: "Erster Schritt",    icon: "👟", color: "#4ade80" },
+  { km: 100,  label: "Halbhundert",       icon: "🏃", color: "#4ade80" },
+  { km: 250,  label: "Viertel-Tausend",   icon: "⭐", color: "#facc15" },
+  { km: 500,  label: "500er Club",        icon: "🥈", color: "#60efff" },
+  { km: 750,  label: "Dreiviertel-K",     icon: "🎯", color: "#fb923c" },
+  { km: 1000, label: "1000 km Legende",   icon: "🥇", color: "#facc15" },
+  { km: 1500, label: "Ultra-Läufer",      icon: "🏅", color: "#a78bfa" },
+  { km: 2000, label: "2000 km Monster",   icon: "🦁", color: "#f43f5e" },
+  { km: 5000, label: "Absoluter Wahnsinn",icon: "🚀", color: "#f43f5e" },
+];
+
+// ── Körper & Trends View (neuer Tab) ──────────────────────────────────────────
+function TrendsView({ workouts }) {
+  const [metrics, setMetrics] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), weight: "", restHr: "" });
+
+  useEffect(() => { loadMetrics().then(setMetrics); }, []);
+
+  const save = async () => {
+    if (!form.weight && !form.restHr) return;
+    const existing = metrics.filter(m => m.date !== form.date);
+    const updated = [...existing, { ...form, id: Date.now() }].sort((a,b) => a.date.localeCompare(b.date));
+    setMetrics(updated); await saveMetrics(updated);
+    setShowForm(false); setForm({ date: new Date().toISOString().slice(0,10), weight: "", restHr: "" });
+  };
+
+  const weightData = metrics.filter(m => m.weight).map(m => ({ date: fmtShort(m.date), kg: parseFloat(m.weight) }));
+  const hrData = metrics.filter(m => m.restHr).map(m => ({ date: fmtShort(m.date), bpm: parseFloat(m.restHr) }));
+
+  // Stimmungs-Statistik nach Wochentag
+  const DAYS = ["So","Mo","Di","Mi","Do","Fr","Sa"];
+  const moodByDay = Array(7).fill(null).map(() => ({ count: 0, scores: [] }));
+  const MOOD_SCORE = { "😴": 1, "😐": 2, "🙂": 3, "💪": 4, "🔥": 5 };
+  workouts.forEach(w => {
+    if (w.mood && w.date) {
+      const dow = new Date(w.date).getDay();
+      moodByDay[dow].count++;
+      moodByDay[dow].scores.push(MOOD_SCORE[w.mood] || 3);
+    }
+  });
+  const moodDayData = DAYS.map((d, i) => ({
+    day: d,
+    avg: moodByDay[i].scores.length ? parseFloat((moodByDay[i].scores.reduce((a,b)=>a+b,0)/moodByDay[i].scores.length).toFixed(1)) : null,
+    count: moodByDay[i].count,
+  }));
+
+  // Meilensteine
+  const totalKm = workouts.reduce((a,w) => a+(parseFloat(w.distance)||0), 0);
+  const reached = MILESTONES.filter(m => totalKm >= m.km);
+  const next = MILESTONES.find(m => totalKm < m.km);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+      {/* ── Meilensteine ── */}
+      <div style={{ background: "#0c0f1d", border: "1px solid #1a1f35", borderRadius: 14, padding: 18 }}>
+        <div style={{ fontSize: 10, color: "#4a5475", letterSpacing: 2, textTransform: "uppercase", marginBottom: 14 }}>🏅 Meilensteine</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+          {MILESTONES.map(m => {
+            const done = totalKm >= m.km;
+            return (
+              <div key={m.km} style={{ background: done ? "#070a14" : "#070a14", border: `1px solid ${done ? m.color+"44" : "#1a1f35"}`, borderRadius: 10, padding: "10px 14px", opacity: done ? 1 : 0.35, textAlign: "center", minWidth: 80 }}>
+                <div style={{ fontSize: 24 }}>{m.icon}</div>
+                <div style={{ fontSize: 10, color: done ? m.color : "#4a5475", fontWeight: 700, marginTop: 4 }}>{m.km} km</div>
+                <div style={{ fontSize: 9, color: "#4a5475", marginTop: 2 }}>{m.label}</div>
+              </div>
+            );
+          })}
+        </div>
+        {next && (
+          <div style={{ background: "#070a14", borderRadius: 10, padding: "12px 16px" }}>
+            <div style={{ fontSize: 11, color: "#4a5475", marginBottom: 6 }}>Nächster Meilenstein: <strong style={{ color: next.color }}>{next.icon} {next.km} km — {next.label}</strong></div>
+            <div style={{ background: "#1a1f35", borderRadius: 4, height: 8, overflow: "hidden" }}>
+              <div style={{ width: `${Math.min(100, (totalKm/next.km)*100).toFixed(1)}%`, height: "100%", background: next.color, borderRadius: 4, transition: "width 0.5s" }} />
+            </div>
+            <div style={{ fontSize: 10, color: "#4a5475", marginTop: 4 }}>{totalKm.toFixed(1)} / {next.km} km — noch {(next.km - totalKm).toFixed(1)} km</div>
+          </div>
+        )}
+        {!next && reached.length === MILESTONES.length && (
+          <div style={{ textAlign: "center", fontSize: 18, color: "#facc15" }}>🚀 Alle Meilensteine erreicht! Absolute Legende!</div>
+        )}
+      </div>
+
+      {/* ── Stimmung nach Wochentag ── */}
+      {workouts.some(w => w.mood) && (
+        <div style={{ background: "#0c0f1d", border: "1px solid #1a1f35", borderRadius: 14, padding: 18 }}>
+          <div style={{ fontSize: 10, color: "#4a5475", letterSpacing: 2, textTransform: "uppercase", marginBottom: 14 }}>😊 Stimmung nach Wochentag</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {moodDayData.map(d => {
+              const emoji = d.avg ? (d.avg >= 4.5 ? "🔥" : d.avg >= 3.5 ? "💪" : d.avg >= 2.5 ? "🙂" : d.avg >= 1.5 ? "😐" : "😴") : null;
+              const color = d.avg ? (d.avg >= 4 ? "#4ade80" : d.avg >= 3 ? "#facc15" : "#fb923c") : "#2a3050";
+              return (
+                <div key={d.day} style={{ flex: 1, background: "#070a14", borderRadius: 10, padding: "10px 6px", textAlign: "center", border: `1px solid ${d.avg ? color+"33" : "#1a1f35"}` }}>
+                  <div style={{ fontSize: 9, color: "#4a5475", marginBottom: 6, fontWeight: 700 }}>{d.day}</div>
+                  <div style={{ fontSize: 20 }}>{emoji || "—"}</div>
+                  {d.avg && <div style={{ fontSize: 10, color, fontWeight: 700, marginTop: 4 }}>{d.avg}</div>}
+                  {d.count > 0 && <div style={{ fontSize: 9, color: "#4a5475", marginTop: 2 }}>{d.count}×</div>}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 12, fontSize: 11, color: "#4a5475" }}>
+            {(() => {
+              const best = moodDayData.filter(d=>d.avg).reduce((b,d) => (!b||d.avg>b.avg)?d:b, null);
+              const worst = moodDayData.filter(d=>d.avg).reduce((b,d) => (!b||d.avg<b.avg)?d:b, null);
+              return best && worst ? `Bester Tag: ${best.day} (⌀ ${best.avg}) · Schlechtester Tag: ${worst.day} (⌀ ${worst.avg})` : "";
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* ── Körper eintragen ── */}
+      <div style={{ background: "#0c0f1d", border: "1px solid #1a1f35", borderRadius: 14, padding: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 10, color: "#4a5475", letterSpacing: 2, textTransform: "uppercase" }}>⚖️ Körperdaten</div>
+          <button onClick={() => setShowForm(v => !v)}
+            style={{ background: "#1a1f35", border: "none", borderRadius: 7, color: "#e8eaf6", padding: "7px 14px", cursor: "pointer", fontSize: 12 }}>
+            {showForm ? "✕" : "+ Eintragen"}
+          </button>
+        </div>
+        {showForm && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14, padding: 14, background: "#070a14", borderRadius: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 10, color: "#4a5475", marginBottom: 4 }}>DATUM</div>
+                <input type="date" value={form.date} onChange={e => setForm(f=>({...f,date:e.target.value}))}
+                  style={{ background: "#0c0f1d", border: "1px solid #1e2436", borderRadius: 7, padding: "8px 10px", color: "#e8eaf6", fontSize: 12, width: "100%", outline: "none" }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: "#a78bfa", marginBottom: 4 }}>GEWICHT (kg)</div>
+                <input type="number" step="0.1" placeholder="75.5" value={form.weight} onChange={e => setForm(f=>({...f,weight:e.target.value}))}
+                  style={{ background: "#0c0f1d", border: "1px solid #a78bfa44", borderRadius: 7, padding: "8px 10px", color: "#e8eaf6", fontSize: 12, width: "100%", outline: "none", fontFamily: "monospace" }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: "#fb923c", marginBottom: 4 }}>RUHEPULS (bpm)</div>
+                <input type="number" placeholder="52" value={form.restHr} onChange={e => setForm(f=>({...f,restHr:e.target.value}))}
+                  style={{ background: "#0c0f1d", border: "1px solid #fb923c44", borderRadius: 7, padding: "8px 10px", color: "#e8eaf6", fontSize: 12, width: "100%", outline: "none", fontFamily: "monospace" }} />
+              </div>
+            </div>
+            <button onClick={save} style={{ background: "#4ade80", border: "none", borderRadius: 7, color: "#050810", padding: "9px", cursor: "pointer", fontSize: 13, fontWeight: 800 }}>Speichern</button>
+          </div>
+        )}
+
+        {/* Gewichts-Chart */}
+        {weightData.length >= 2 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 11, color: "#a78bfa", marginBottom: 10, fontWeight: 600 }}>Gewicht kg</div>
+            <ResponsiveContainer width="100%" height={120}>
+              <AreaChart data={weightData}>
+                <defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#a78bfa" stopOpacity={0.15}/><stop offset="95%" stopColor="#a78bfa" stopOpacity={0}/></linearGradient></defs>
+                <CartesianGrid stroke="#111525" strokeDasharray="3 3" vertical={false}/>
+                <XAxis dataKey="date" tick={{fill:"#4a5475",fontSize:9}} axisLine={false} tickLine={false}/>
+                <YAxis domain={["dataMin-1","dataMax+1"]} tick={{fill:"#4a5475",fontSize:9}} axisLine={false} tickLine={false}/>
+                <Tooltip contentStyle={{background:"#0c0f1d",border:"1px solid #1a1f35",borderRadius:8,fontSize:12}} labelStyle={{color:"#e8eaf6"}} formatter={v=>[`${v} kg`]}/>
+                <Area type="monotone" dataKey="kg" stroke="#a78bfa" strokeWidth={2} fill="url(#wg)" dot={{fill:"#a78bfa",r:3,strokeWidth:0}}/>
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Ruhepuls-Chart */}
+        {hrData.length >= 2 && (
+          <div>
+            <div style={{ fontSize: 11, color: "#fb923c", marginBottom: 10, fontWeight: 600 }}>Ruhepuls bpm <span style={{fontSize:10,color:"#4a5475",fontWeight:400}}>(↓ = besser)</span></div>
+            <ResponsiveContainer width="100%" height={120}>
+              <AreaChart data={hrData}>
+                <defs><linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#fb923c" stopOpacity={0.15}/><stop offset="95%" stopColor="#fb923c" stopOpacity={0}/></linearGradient></defs>
+                <CartesianGrid stroke="#111525" strokeDasharray="3 3" vertical={false}/>
+                <XAxis dataKey="date" tick={{fill:"#4a5475",fontSize:9}} axisLine={false} tickLine={false}/>
+                <YAxis domain={["dataMin-2","dataMax+2"]} tick={{fill:"#4a5475",fontSize:9}} axisLine={false} tickLine={false}/>
+                <Tooltip contentStyle={{background:"#0c0f1d",border:"1px solid #1a1f35",borderRadius:8,fontSize:12}} labelStyle={{color:"#e8eaf6"}} formatter={v=>[`${v} bpm`]}/>
+                <Area type="monotone" dataKey="bpm" stroke="#fb923c" strokeWidth={2} fill="url(#hg)" dot={{fill:"#fb923c",r:3,strokeWidth:0}}/>
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {metrics.length === 0 && <div style={{color:"#2a3050",fontSize:12}}>Noch keine Körperdaten. Trag heute deinen ersten Wert ein!</div>}
+      </div>
+    </div>
+  );
+}
+
 // ── Übersicht ──────────────────────────────────────────────────────────────────
 function UebersichtView({ workouts }) {
   const [mode, setMode] = useState("week");
@@ -1376,6 +1562,7 @@ const NAV = [
   { key: "analyse",   label: "Analyse" },
   { key: "uebersicht",label: "Übersicht" },
   { key: "ziele",     label: "Ziele 🎯" },
+  { key: "trends",    label: "Trends 📈" },
 ];
 
 export default function App() {
@@ -1438,6 +1625,7 @@ export default function App() {
                 {view === "analyse"     && <AnalyseView   workouts={workouts} />}
                 {view === "uebersicht"  && <UebersichtView workouts={workouts} />}
                 {view === "ziele"       && <ZieleView      workouts={workouts} />}
+                {view === "trends"      && <TrendsView     workouts={workouts} />}
               </>
             )}
           </>
