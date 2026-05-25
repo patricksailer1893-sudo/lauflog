@@ -32,6 +32,16 @@ const HRZ = [
   { label: "Z4", key: "z4", color: "#fb923c", min: 153, max: 171, name: "Schwelle" },
   { label: "Z5", key: "z5", color: "#f43f5e", min: 172, max: 999, name: "VO2max" },
 ];
+
+// Pace-Zonen (Strava SAT — basierend auf Patrick's Profil)
+const PACEZ = [
+  { label: "Z1", key: "pz1", color: "#60efff", name: "Regeneration", range: "> 8:34" },
+  { label: "Z2", key: "pz2", color: "#4ade80", name: "Ausdauer",     range: "7:23–8:34" },
+  { label: "Z3", key: "pz3", color: "#facc15", name: "Tempo",        range: "6:37–7:23" },
+  { label: "Z4", key: "pz4", color: "#fb923c", name: "Schwelle",     range: "6:12–6:37" },
+  { label: "Z5", key: "pz5", color: "#f43f5e", name: "VO2 Max",      range: "5:50–6:12" },
+  { label: "Z6", key: "pz6", color: "#c084fc", name: "Anaerob",      range: "< 5:50" },
+];
 const TYPE_GROUPS = [
   { group: "🏃 Laufen",      types: ["Easy Run", "Long Run", "Tempo", "Intervall", "Progression Run", "Music Run", "HIIT Run", "Walking", "Recovery"] },
   { group: "🚴 Bike / Bike+", types: ["Cycling", "Power Zone", "Power Zone Endurance", "Power Zone Max", "HIIT & Hills", "Climb", "Intervals (Bike)", "Tabata", "Low Impact", "Beginner Ride", "Groove", "Theme Ride"] },
@@ -348,7 +358,7 @@ function GpxDropZone({ onParsed }) {
 }
 
 // ── Workout Form ───────────────────────────────────────────────────────────────
-const EMPTY = { date: new Date().toISOString().slice(0, 10), type: "Easy Run", instructor: "", watt: "", distance: "", duration: "", avgPace: "", avgHr: "", eleUp: "", eleDown: "", calories: "", mood: "", z1: "", z2: "", z3: "", z4: "", z5: "", notes: "" };
+const EMPTY = { date: new Date().toISOString().slice(0, 10), type: "Easy Run", instructor: "", watt: "", distance: "", duration: "", avgPace: "", avgHr: "", eleUp: "", eleDown: "", calories: "", mood: "", z1: "", z2: "", z3: "", z4: "", z5: "", pz1: "", pz2: "", pz3: "", pz4: "", pz5: "", pz6: "", notes: "" };
 const MOODS = ["😴","😐","🙂","💪","🔥"];
 const MOOD_LABELS = ["Müde","Okay","Gut","Stark","Feuer"];
 
@@ -443,6 +453,20 @@ function WorkoutForm({ onSave, onCancel, initial }) {
             )}
           </div>
           <div>
+            <div style={{ fontSize: 10, color: "#4a5475", letterSpacing: 1.5, marginBottom: 8, textTransform: "uppercase" }}>Tempo-Zonen % <span style={{ color: "#2a3a50", fontWeight: 400, fontSize: 9 }}>(Strava SAT)</span></div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6 }}>
+              {PACEZ.map(z => (
+                <div key={z.key}>
+                  <div style={{ fontSize: 9, color: z.color, marginBottom: 2 }}>{z.label} {z.name}</div>
+                  <div style={{ fontSize: 8, color: "#3a4460", marginBottom: 3 }}>{z.range}</div>
+                  <input type="number" placeholder="%" min={0} max={100} value={form[z.key] ?? ""} onChange={e => set(z.key, e.target.value)}
+                    style={{ background: "#070a14", border: `1px solid ${z.color}44`, borderRadius: 7, padding: "7px 6px", color: "#e8eaf6", fontSize: 12, width: "100%", outline: "none" }} />
+                </div>
+              ))}
+            </div>
+            {(() => { const t = PACEZ.reduce((a,z)=>a+(Number(form[z.key])||0),0); return t>0&&Math.abs(t-100)>=1?<div style={{color:"#f43f5e",fontSize:11,marginTop:4}}>Tempo-Zonen = {t}% (Ziel: 100%)</div>:null; })()}
+          </div>
+          <div>
             <div style={{ fontSize: 10, color: "#4a5475", letterSpacing: 1.5, marginBottom: 8, textTransform: "uppercase" }}>Wie war das Training?</div>
             <div style={{ display: "flex", gap: 8 }}>
               {MOODS.map((emoji, i) => (
@@ -517,6 +541,13 @@ function WorkoutList({ workouts, onAdd, onEdit, onDelete }) {
               </div>
             </div>
             <ZoneBar workout={w} />
+            {PACEZ.some(z => Number(w[z.key]) > 0) && (
+              <div style={{ display: "flex", height: 5, borderRadius: 3, overflow: "hidden" }}>
+                {PACEZ.map(z => Number(w[z.key]) > 0 && (
+                  <div key={z.key} style={{ width: `${w[z.key]}%`, background: z.color }} title={`${z.label} ${z.name}: ${w[z.key]}%`} />
+                ))}
+              </div>
+            )}
             {w.notes && <div style={{ fontSize: 12, color: "#4a5475", fontStyle: "italic" }}>{w.notes}</div>}
           </div>
         );
@@ -1085,6 +1116,35 @@ function AnalyseView({ workouts }) {
           </BarChart>
         </ResponsiveContainer>
       </div>
+
+      {(() => {
+        const pzTot = {pz1:0,pz2:0,pz3:0,pz4:0,pz5:0,pz6:0}; let pzCnt=0;
+        workouts.forEach(w=>{if(PACEZ.some(z=>Number(w[z.key])>0)){PACEZ.forEach(z=>{pzTot[z.key]+=Number(w[z.key])||0});pzCnt++;}});
+        if(!pzCnt) return null;
+        const pzAvg = PACEZ.map(z=>({...z, pct:Math.round(pzTot[z.key]/pzCnt)}));
+        return (
+          <div style={{ background: "#0c0f1d", border: "1px solid #1a1f35", borderRadius: 14, padding: 20 }}>
+            <div style={{ fontSize: 10, color: "#4a5475", letterSpacing: 2, textTransform: "uppercase", marginBottom: 12 }}>Ø Tempo-Zonenverteilung (Strava SAT)</div>
+            <div style={{ display: "flex", height: 14, borderRadius: 6, overflow: "hidden", marginBottom: 12 }}>
+              {pzAvg.map(z => z.pct > 0 && <div key={z.key} style={{ width: `${z.pct}%`, background: z.color }} title={`${z.label}: ${z.pct}%`} />)}
+            </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+              {pzAvg.map(z => (
+                <div key={z.key} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: 2, background: z.color }} />
+                  <span style={{ fontSize: 11, color: "#8a9ab5" }}>{z.label} {z.name}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: z.color, fontFamily: "monospace" }}>{z.pct}%</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: "#4a5475" }}>
+              Hauptzone: <strong style={{ color: pzAvg.reduce((b,z)=>z.pct>b.pct?z:b,{pct:0}).color }}>
+                {pzAvg.reduce((b,z)=>z.pct>b.pct?z:b,{pct:0,label:"",name:""}).label} {pzAvg.reduce((b,z)=>z.pct>b.pct?z:b,{pct:0,label:"",name:""}).name}
+              </strong> — {pzAvg.reduce((b,z)=>z.pct>b.pct?z:b,{pct:0}).range}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
