@@ -921,6 +921,52 @@ function Dashboard({ workouts, onAdd, onEdit }) {
         </div>
       </div>
 
+      {/* ── Monatsrückblick ── */}
+      {(() => {
+        const prevMonth = new Date(); prevMonth.setMonth(prevMonth.getMonth() - 1);
+        const prevMk = prevMonth.toISOString().slice(0, 7);
+        const prevWos = workouts.filter(w => getMonthKey(w.date) === prevMk);
+        if (!prevWos.length) return null;
+        const prevKm = prevWos.reduce((a,w) => a+(parseFloat(w.distance)||0), 0);
+        const prevMin = prevWos.reduce((a,w) => a+(parseFloat(w.duration)||0), 0);
+        const prevPaces = prevWos.filter(w => paceToSecs(w.avgPace)).map(w => paceToSecs(w.avgPace));
+        const prevAvgPace = prevPaces.length ? secsToMmSs(prevPaces.reduce((a,b)=>a+b,0)/prevPaces.length) : null;
+        const moodCounts = {};
+        prevWos.forEach(w => { if(w.mood) moodCounts[w.mood] = (moodCounts[w.mood]||0)+1; });
+        const topMood = Object.entries(moodCounts).sort((a,b)=>b[1]-a[1])[0]?.[0];
+        const monthName = prevMonth.toLocaleDateString("de-DE", { month: "long" });
+        const pbRun = prevWos.filter(w=>w.distance).reduce((b,w)=>(!b||parseFloat(w.distance)>parseFloat(b.distance))?w:b, null);
+        return (
+          <div style={{ background: "#0c0f1d", border: "1px solid #a78bfa33", borderRadius: 14, padding: 18 }}>
+            <div style={{ fontSize: 10, color: "#a78bfa", letterSpacing: 2, textTransform: "uppercase", marginBottom: 14 }}>
+              📅 Rückblick {monthName}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
+              <div style={{ background: "#070a14", borderRadius: 10, padding: "10px 12px" }}>
+                <div style={{ fontSize: 9, color: "#4a5475", textTransform: "uppercase", marginBottom: 3 }}>KM</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: "#4ade80", fontFamily: "monospace" }}>{prevKm.toFixed(0)}</div>
+              </div>
+              <div style={{ background: "#070a14", borderRadius: 10, padding: "10px 12px" }}>
+                <div style={{ fontSize: 9, color: "#4a5475", textTransform: "uppercase", marginBottom: 3 }}>EINHEITEN</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: "#60efff", fontFamily: "monospace" }}>{prevWos.length}</div>
+              </div>
+              <div style={{ background: "#070a14", borderRadius: 10, padding: "10px 12px" }}>
+                <div style={{ fontSize: 9, color: "#4a5475", textTransform: "uppercase", marginBottom: 3 }}>ZEIT</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: "#facc15", fontFamily: "monospace" }}>{Math.floor(prevMin/60)}h</div>
+              </div>
+              <div style={{ background: "#070a14", borderRadius: 10, padding: "10px 12px" }}>
+                <div style={{ fontSize: 9, color: "#4a5475", textTransform: "uppercase", marginBottom: 3 }}>STIMMUNG</div>
+                <div style={{ fontSize: 20 }}>{topMood || "—"}</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {prevAvgPace && <div style={{ background: "#070a14", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#facc15" }}>⌀ Pace: <strong>{prevAvgPace} /km</strong></div>}
+              {pbRun && <div style={{ background: "#070a14", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#60efff" }}>Längster Lauf: <strong>{parseFloat(pbRun.distance).toFixed(1)} km</strong></div>}
+            </div>
+          </div>
+        );
+      })()}
+
       <button onClick={onAdd} style={{ background: "#4ade80", border: "none", borderRadius: 10, color: "#050810", padding: 13, cursor: "pointer", fontSize: 14, fontWeight: 800, width: "100%" }}>
         + Neue Einheit
       </button>
@@ -1162,12 +1208,174 @@ function UebersichtView({ workouts }) {
   );
 }
 
+// ── Goals Storage ─────────────────────────────────────────────────────────────
+const GOALS_KEY = "laufanalyse_goals_v1";
+async function loadGoals() {
+  try { const raw = localStorage.getItem(GOALS_KEY); return raw ? JSON.parse(raw) : []; }
+  catch { return []; }
+}
+async function saveGoals(gs) {
+  try { localStorage.setItem(GOALS_KEY, JSON.stringify(gs)); } catch {}
+}
+
+// ── Ziele View ─────────────────────────────────────────────────────────────────
+function ZieleView({ workouts }) {
+  const [goals, setGoals] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ label: "", type: "km_month", target: "", unit: "km" });
+
+  useEffect(() => { loadGoals().then(setGoals); }, []);
+
+  const GOAL_TYPES = [
+    { key: "km_month",    label: "km diesen Monat",    unit: "km" },
+    { key: "km_week",     label: "km diese Woche",     unit: "km" },
+    { key: "sessions_month", label: "Einheiten diesen Monat", unit: "" },
+    { key: "km_total",    label: "km gesamt",          unit: "km" },
+    { key: "streak",      label: "Streak Tage",        unit: "Tage" },
+  ];
+
+  const t = todayStr();
+
+  function calcProgress(goal) {
+    let current = 0;
+    if (goal.type === "km_month") {
+      const mk = getMonthKey(t);
+      current = workouts.filter(w => getMonthKey(w.date) === mk).reduce((a,w) => a+(parseFloat(w.distance)||0), 0);
+    } else if (goal.type === "km_week") {
+      const wk = getMondayKey(t);
+      current = workouts.filter(w => getMondayKey(w.date) === wk).reduce((a,w) => a+(parseFloat(w.distance)||0), 0);
+    } else if (goal.type === "sessions_month") {
+      const mk = getMonthKey(t);
+      current = workouts.filter(w => getMonthKey(w.date) === mk).length;
+    } else if (goal.type === "km_total") {
+      current = workouts.reduce((a,w) => a+(parseFloat(w.distance)||0), 0);
+    } else if (goal.type === "streak") {
+      const sorted = [...new Set(workouts.map(w=>w.date))].sort((a,b)=>b.localeCompare(a));
+      let streak = 0;
+      if (sorted.length > 0) {
+        const msPerDay = 86400000;
+        const today0 = new Date(t); today0.setHours(0,0,0,0);
+        let check = new Date(sorted[0]); check.setHours(0,0,0,0);
+        if (Math.round((today0-check)/msPerDay) <= 1) {
+          streak = 1;
+          for (let i=1;i<sorted.length;i++) {
+            const p=new Date(sorted[i-1]); p.setHours(0,0,0,0);
+            const c=new Date(sorted[i]); c.setHours(0,0,0,0);
+            if (Math.round((p-c)/msPerDay)===1) streak++; else break;
+          }
+        }
+      }
+      current = streak;
+    }
+    const pct = Math.min(100, Math.round((current / parseFloat(goal.target)) * 100));
+    return { current: parseFloat(current.toFixed(1)), pct };
+  }
+
+  const addGoal = async () => {
+    if (!form.target) return;
+    const gt = GOAL_TYPES.find(g => g.key === form.type);
+    const newGoal = { ...form, id: Date.now(), label: form.label || gt.label, unit: gt.unit };
+    const updated = [...goals, newGoal];
+    setGoals(updated);
+    await saveGoals(updated);
+    setShowForm(false);
+    setForm({ label: "", type: "km_month", target: "", unit: "km" });
+  };
+
+  const deleteGoal = async (id) => {
+    const updated = goals.filter(g => g.id !== id);
+    setGoals(updated);
+    await saveGoals(updated);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontSize: 10, color: "#4a5475", letterSpacing: 2, textTransform: "uppercase" }}>Meine Ziele</div>
+        <button onClick={() => setShowForm(v => !v)}
+          style={{ background: "#4ade80", border: "none", borderRadius: 8, color: "#050810", padding: "9px 18px", cursor: "pointer", fontSize: 13, fontWeight: 800 }}>
+          {showForm ? "✕ Abbrechen" : "+ Ziel hinzufügen"}
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={{ background: "#0c0f1d", border: "1px solid #4ade8033", borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 10, color: "#4a5475", marginBottom: 4, textTransform: "uppercase" }}>Zieltyp</div>
+              <select value={form.type} onChange={e => setForm(f => ({...f, type: e.target.value}))}
+                style={{ background: "#070a14", border: "1px solid #1e2436", borderRadius: 7, padding: "9px 12px", color: "#e8eaf6", fontSize: 13, outline: "none", width: "100%" }}>
+                {GOAL_TYPES.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: "#4a5475", marginBottom: 4, textTransform: "uppercase" }}>Zielwert</div>
+              <input type="number" placeholder="z.B. 80" value={form.target} onChange={e => setForm(f => ({...f, target: e.target.value}))}
+                style={{ background: "#070a14", border: "1px solid #4ade8044", borderRadius: 7, padding: "9px 12px", color: "#e8eaf6", fontSize: 13, width: "100%", outline: "none", fontFamily: "monospace" }} />
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: "#4a5475", marginBottom: 4, textTransform: "uppercase" }}>Name (optional)</div>
+            <input type="text" placeholder="z.B. Monatsgoal Mai" value={form.label} onChange={e => setForm(f => ({...f, label: e.target.value}))}
+              style={{ background: "#070a14", border: "1px solid #1e2436", borderRadius: 7, padding: "9px 12px", color: "#e8eaf6", fontSize: 13, width: "100%", outline: "none" }} />
+          </div>
+          <button onClick={addGoal}
+            style={{ background: "#4ade80", border: "none", borderRadius: 7, color: "#050810", padding: "10px", cursor: "pointer", fontSize: 13, fontWeight: 800 }}>
+            Ziel speichern
+          </button>
+        </div>
+      )}
+
+      {goals.length === 0 && !showForm && (
+        <div style={{ textAlign: "center", padding: 60, color: "#2a3050", fontSize: 14 }}>
+          Noch keine Ziele gesetzt. Leg los! 🎯
+        </div>
+      )}
+
+      {goals.map(goal => {
+        const { current, pct } = calcProgress(goal);
+        const done = pct >= 100;
+        const gt = GOAL_TYPES.find(g => g.key === goal.type);
+        return (
+          <div key={goal.id} style={{ background: "#0c0f1d", border: `1px solid ${done ? "#4ade8044" : "#1a1f35"}`, borderRadius: 14, padding: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: done ? "#4ade80" : "#e8eaf6", marginBottom: 3 }}>
+                  {done && "✓ "}{goal.label}
+                </div>
+                <div style={{ fontSize: 11, color: "#4a5475" }}>{gt?.label}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: done ? "#4ade80" : "#e8eaf6", fontFamily: "monospace" }}>
+                    {current}{goal.unit && ` ${goal.unit}`}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#4a5475" }}>von {goal.target}{goal.unit && ` ${goal.unit}`}</div>
+                </div>
+                <button onClick={() => deleteGoal(goal.id)}
+                  style={{ background: "transparent", border: "1px solid #2a1a1a", borderRadius: 6, color: "#f43f5e66", padding: "5px 8px", cursor: "pointer", fontSize: 11 }}>✕</button>
+              </div>
+            </div>
+            <div style={{ background: "#070a14", borderRadius: 6, height: 10, overflow: "hidden" }}>
+              <div style={{ width: `${pct}%`, height: "100%", background: done ? "#4ade80" : pct > 70 ? "#facc15" : "#4ade8088", borderRadius: 6, transition: "width 0.5s" }} />
+            </div>
+            <div style={{ marginTop: 6, fontSize: 11, color: done ? "#4ade80" : "#4a5475" }}>
+              {done ? "Ziel erreicht! 🎉" : `${pct}% — noch ${parseFloat((parseFloat(goal.target) - current).toFixed(1))}${goal.unit ? ` ${goal.unit}` : ""} bis zum Ziel`}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── App ────────────────────────────────────────────────────────────────────────
 const NAV = [
-  { key: "dashboard", label: "Dashboard", icon: "◉" },
-  { key: "list",      label: "Einheiten", icon: "≡" },
-  { key: "analyse",   label: "Analyse",   icon: "∿" },
-  { key: "uebersicht",label: "Übersicht", icon: "▦" },
+  { key: "dashboard", label: "Dashboard" },
+  { key: "list",      label: "Einheiten" },
+  { key: "analyse",   label: "Analyse" },
+  { key: "uebersicht",label: "Übersicht" },
+  { key: "ziele",     label: "Ziele 🎯" },
 ];
 
 export default function App() {
@@ -1229,6 +1437,7 @@ export default function App() {
                 {view === "list"        && <WorkoutList   workouts={workouts} onAdd={openAdd} onEdit={openEdit} onDelete={handleDelete} />}
                 {view === "analyse"     && <AnalyseView   workouts={workouts} />}
                 {view === "uebersicht"  && <UebersichtView workouts={workouts} />}
+                {view === "ziele"       && <ZieleView      workouts={workouts} />}
               </>
             )}
           </>
