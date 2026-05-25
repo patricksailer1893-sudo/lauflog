@@ -1145,6 +1145,53 @@ function AnalyseView({ workouts }) {
           </div>
         );
       })()}
+
+      {/* ── Instructor Statistik ── */}
+      {(() => {
+        const instMap = {};
+        workouts.forEach(w => {
+          if (!w.instructor || w.instructor === "Andere / Kein Instructor") return;
+          if (!instMap[w.instructor]) instMap[w.instructor] = { count: 0, km: 0, paceSum: 0, paceCount: 0 };
+          const r = instMap[w.instructor];
+          r.count++;
+          r.km += parseFloat(w.distance) || 0;
+          const ps = paceToSecs(w.avgPace);
+          if (ps) { r.paceSum += ps; r.paceCount++; }
+        });
+        const instructors = Object.entries(instMap)
+          .map(([name, r]) => ({ name, count: r.count, km: parseFloat(r.km.toFixed(1)), avgPace: r.paceCount ? secsToMmSs(r.paceSum / r.paceCount) : null }))
+          .sort((a, b) => b.count - a.count);
+        if (!instructors.length) return null;
+        const maxCount = instructors[0].count;
+        return (
+          <div style={{ background: "#0c0f1d", border: "1px solid #1a1f35", borderRadius: 14, padding: 20 }}>
+            <div style={{ fontSize: 10, color: "#4a5475", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>👤 Instructor Statistik</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {instructors.map((inst, i) => (
+                <div key={inst.name}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      {i === 0 && <span style={{ fontSize: 14 }}>🥇</span>}
+                      {i === 1 && <span style={{ fontSize: 14 }}>🥈</span>}
+                      {i === 2 && <span style={{ fontSize: 14 }}>🥉</span>}
+                      {i > 2 && <span style={{ fontSize: 12, color: "#4a5475", width: 20, textAlign: "center" }}>{i+1}.</span>}
+                      <span style={{ fontSize: 13, fontWeight: i === 0 ? 700 : 400, color: i === 0 ? "#e8eaf6" : "#8a9ab5" }}>{inst.name}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                      {inst.avgPace && <span style={{ fontSize: 11, color: "#facc15", fontFamily: "monospace" }}>⌀ {inst.avgPace} /km</span>}
+                      <span style={{ fontSize: 11, color: "#a78bfa", fontFamily: "monospace" }}>{inst.km} km</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#4ade80", fontFamily: "monospace", minWidth: 24, textAlign: "right" }}>{inst.count}×</span>
+                    </div>
+                  </div>
+                  <div style={{ background: "#070a14", borderRadius: 3, height: 5, overflow: "hidden" }}>
+                    <div style={{ width: `${(inst.count / maxCount) * 100}%`, height: "100%", background: i === 0 ? "#4ade80" : i === 1 ? "#60efff" : i === 2 ? "#facc15" : "#1a2e1a", borderRadius: 3 }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
