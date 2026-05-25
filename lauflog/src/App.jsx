@@ -1508,6 +1508,59 @@ function UebersichtView({ workouts }) {
           </ResponsiveContainer>
         </div>
       )}
+
+      {/* ── Monatsvergleich ── */}
+      {(() => {
+        const monthRows = buildPeriodRows(workouts, getMonthKey);
+        if (monthRows.length < 2) return null;
+        const sorted = [...monthRows].sort((a,b) => b.key.localeCompare(a.key));
+        const curr = sorted[0];
+        const prev = sorted[1];
+        const diff = (a, b) => a && b ? parseFloat((a - b).toFixed(1)) : null;
+        const pct = (a, b) => a && b && b > 0 ? Math.round(((a - b) / b) * 100) : null;
+        const Arrow = ({ val, invert = false }) => {
+          if (!val) return null;
+          const positive = invert ? val < 0 : val > 0;
+          return <span style={{ color: positive ? "#E31837" : "#AAAAAA", fontSize: 12 }}>{val > 0 ? "↑" : "↓"}</span>;
+        };
+        const metrics = [
+          { label: "km", curr: curr.km, prev: prev.km, fmt: v => v.toFixed(1), invert: false },
+          { label: "Einheiten", curr: curr.count, prev: prev.count, fmt: v => v, invert: false },
+          { label: "Zeit", curr: curr.minutes, prev: prev.minutes, fmt: v => `${Math.floor(v/60)}h ${Math.round(v%60)}m`, invert: false },
+          { label: "Ø Pace", curr: paceToSecs(curr.avgPace), prev: paceToSecs(prev.avgPace), fmt: v => secsToMmSs(v), invert: true },
+          { label: "Ø HF", curr: curr.avgHr, prev: prev.avgHr, fmt: v => `${v} bpm`, invert: true },
+        ];
+        const [cy, cm] = curr.key.split("-");
+        const [py, pm] = prev.key.split("-");
+        const currName = new Date(cy, cm-1).toLocaleDateString("de-DE", { month: "long", year: "numeric" });
+        const prevName = new Date(py, pm-1).toLocaleDateString("de-DE", { month: "long", year: "numeric" });
+        return (
+          <div style={{ background: "#111111", border: "1px solid #E3183733", borderRadius: 14, padding: 20 }}>
+            <div style={{ fontSize: 10, color: "#E31837", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>📊 Monatsvergleich</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 0, marginBottom: 14 }}>
+              <div />
+              <div style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: "#FFFFFF", paddingBottom: 10, borderBottom: "1px solid #222222" }}>{currName}</div>
+              <div style={{ textAlign: "center", fontSize: 11, color: "#666666", paddingBottom: 10, borderBottom: "1px solid #222222" }}>{prevName}</div>
+            </div>
+            {metrics.map(m => {
+              if (!m.curr && !m.prev) return null;
+              const d = diff(m.curr, m.prev);
+              const p = pct(m.curr, m.prev);
+              const better = m.invert ? d < 0 : d > 0;
+              return (
+                <div key={m.label} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 0, padding: "10px 0", borderBottom: "1px solid #1a1a1a", alignItems: "center" }}>
+                  <div style={{ fontSize: 11, color: "#666666", textTransform: "uppercase", letterSpacing: 1 }}>{m.label}</div>
+                  <div style={{ textAlign: "center", fontSize: 16, fontWeight: 800, color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                    {m.curr ? m.fmt(m.curr) : "—"}
+                    {d !== null && <span style={{ fontSize: 11, color: better ? "#E31837" : "#666666" }}>{d > 0 ? "↑" : "↓"}{p !== null ? `${Math.abs(p)}%` : ""}</span>}
+                  </div>
+                  <div style={{ textAlign: "center", fontSize: 13, color: "#666666" }}>{m.prev ? m.fmt(m.prev) : "—"}</div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 }
