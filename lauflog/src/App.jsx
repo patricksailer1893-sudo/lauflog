@@ -1196,17 +1196,23 @@ function AnalyseView({ workouts }) {
   );
 }
 
-// ── Meilensteine ───────────────────────────────────────────────────────────────
+// ── Minuten-Meilensteine (Peloton-Stil) ────────────────────────────────────────
 const MILESTONES = [
-  { km: 50,   label: "Erster Schritt",    icon: "👟", color: "#4ade80" },
-  { km: 100,  label: "Halbhundert",       icon: "🏃", color: "#4ade80" },
-  { km: 250,  label: "Viertel-Tausend",   icon: "⭐", color: "#facc15" },
-  { km: 500,  label: "500er Club",        icon: "🥈", color: "#60efff" },
-  { km: 750,  label: "Dreiviertel-K",     icon: "🎯", color: "#fb923c" },
-  { km: 1000, label: "1000 km Legende",   icon: "🥇", color: "#facc15" },
-  { km: 1500, label: "Ultra-Läufer",      icon: "🏅", color: "#a78bfa" },
-  { km: 2000, label: "2000 km Monster",   icon: "🦁", color: "#f43f5e" },
-  { km: 5000, label: "Absoluter Wahnsinn",icon: "🚀", color: "#f43f5e" },
+  { min: 1000,  label: "1.000 Min",  icon: "🥉", color: "#60efff" },
+  { min: 2000,  label: "2.000 Min",  icon: "🥈", color: "#4ade80" },
+  { min: 3000,  label: "3.000 Min",  icon: "🥇", color: "#facc15" },
+  { min: 4000,  label: "4.000 Min",  icon: "⭐", color: "#facc15" },
+  { min: 5000,  label: "5.000 Min",  icon: "💎", color: "#60efff" },
+  { min: 6000,  label: "6.000 Min",  icon: "🏅", color: "#fb923c" },
+  { min: 7000,  label: "7.000 Min",  icon: "🔥", color: "#f43f5e" },
+  { min: 8000,  label: "8.000 Min",  icon: "💪", color: "#a78bfa" },
+  { min: 9000,  label: "9.000 Min",  icon: "🦁", color: "#fb923c" },
+  { min: 10000, label: "10.000 Min", icon: "🏆", color: "#facc15" },
+  { min: 12000, label: "12.000 Min", icon: "🚀", color: "#60efff" },
+  { min: 14000, label: "14.000 Min", icon: "⚡", color: "#4ade80" },
+  { min: 16000, label: "16.000 Min", icon: "🌟", color: "#facc15" },
+  { min: 18000, label: "18.000 Min", icon: "🎯", color: "#a78bfa" },
+  { min: 20000, label: "20.000 Min", icon: "👑", color: "#f43f5e" },
 ];
 
 // ── Körper & Trends View (neuer Tab) ──────────────────────────────────────────
@@ -1245,10 +1251,10 @@ function TrendsView({ workouts }) {
     count: moodByDay[i].count,
   }));
 
-  // Meilensteine
-  const totalKm = workouts.reduce((a,w) => a+(parseFloat(w.distance)||0), 0);
-  const reached = MILESTONES.filter(m => totalKm >= m.km);
-  const next = MILESTONES.find(m => totalKm < m.km);
+  // Meilensteine basierend auf Aktivitätsminuten
+  const totalMin = workouts.reduce((a,w) => a+(parseFloat(w.duration)||0), 0);
+  const reached = MILESTONES.filter(m => totalMin >= m.min);
+  const next = MILESTONES.find(m => totalMin < m.min);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -1258,27 +1264,28 @@ function TrendsView({ workouts }) {
         <div style={{ fontSize: 10, color: "#4a5475", letterSpacing: 2, textTransform: "uppercase", marginBottom: 14 }}>🏅 Meilensteine</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
           {MILESTONES.map(m => {
-            const done = totalKm >= m.km;
+            const done = totalMin >= m.min;
             return (
-              <div key={m.km} style={{ background: done ? "#070a14" : "#070a14", border: `1px solid ${done ? m.color+"44" : "#1a1f35"}`, borderRadius: 10, padding: "10px 14px", opacity: done ? 1 : 0.35, textAlign: "center", minWidth: 80 }}>
+              <div key={m.min} style={{ background: "#070a14", border: `1px solid ${done ? m.color+"44" : "#1a1f35"}`, borderRadius: 10, padding: "10px 14px", opacity: done ? 1 : 0.35, textAlign: "center", minWidth: 80 }}>
                 <div style={{ fontSize: 24 }}>{m.icon}</div>
-                <div style={{ fontSize: 10, color: done ? m.color : "#4a5475", fontWeight: 700, marginTop: 4 }}>{m.km} km</div>
-                <div style={{ fontSize: 9, color: "#4a5475", marginTop: 2 }}>{m.label}</div>
+                <div style={{ fontSize: 10, color: done ? m.color : "#4a5475", fontWeight: 700, marginTop: 4 }}>{m.label}</div>
               </div>
             );
           })}
         </div>
         {next && (
           <div style={{ background: "#070a14", borderRadius: 10, padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, color: "#4a5475", marginBottom: 6 }}>Nächster Meilenstein: <strong style={{ color: next.color }}>{next.icon} {next.km} km — {next.label}</strong></div>
+            <div style={{ fontSize: 11, color: "#4a5475", marginBottom: 6 }}>Nächster Meilenstein: <strong style={{ color: next.color }}>{next.icon} {next.label}</strong></div>
             <div style={{ background: "#1a1f35", borderRadius: 4, height: 8, overflow: "hidden" }}>
-              <div style={{ width: `${Math.min(100, (totalKm/next.km)*100).toFixed(1)}%`, height: "100%", background: next.color, borderRadius: 4, transition: "width 0.5s" }} />
+              <div style={{ width: `${Math.min(100, (totalMin/next.min)*100).toFixed(1)}%`, height: "100%", background: next.color, borderRadius: 4, transition: "width 0.5s" }} />
             </div>
-            <div style={{ fontSize: 10, color: "#4a5475", marginTop: 4 }}>{totalKm.toFixed(1)} / {next.km} km — noch {(next.km - totalKm).toFixed(1)} km</div>
+            <div style={{ fontSize: 10, color: "#4a5475", marginTop: 4 }}>
+              {Math.round(totalMin)} / {next.min} Min — noch {Math.round(next.min - totalMin)} Min bis zum Ziel
+            </div>
           </div>
         )}
         {!next && reached.length === MILESTONES.length && (
-          <div style={{ textAlign: "center", fontSize: 18, color: "#facc15" }}>🚀 Alle Meilensteine erreicht! Absolute Legende!</div>
+          <div style={{ textAlign: "center", fontSize: 18, color: "#facc15" }}>👑 Alle Meilensteine erreicht! Absolute Legende!</div>
         )}
       </div>
 
